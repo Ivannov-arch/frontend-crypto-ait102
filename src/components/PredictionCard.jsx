@@ -139,13 +139,22 @@ export function PredictionSkeleton({ className = "" }) {
   );
 }
 
-export function PredictionError({ message, className = "" }) {
+export function PredictionError({ message, apiUrl, className = "" }) {
   return (
     <div className={`p-5 bg-red-950/20 border border-red-800/30 rounded-xl text-sm text-red-400 space-y-1 ${className}`}>
       <p className="font-semibold">⚠ AI prediction unavailable</p>
       <p className="text-red-500/70">{message}</p>
+      {apiUrl && (
+        <p className="text-red-500/50 text-xs break-all">
+          API: <code className="text-red-400">{apiUrl}</code>
+        </p>
+      )}
       <p className="text-red-500/50 text-xs">
-        Run the ML API from the <code className="text-red-400">ml/</code> folder on port 8000.
+        Local: <code className="text-red-400">cd ml &amp;&amp; uvicorn main:app --reload --port 8000</code>
+        {" · "}
+        Set <code className="text-red-400">NEXT_PUBLIC_API_URL=http://localhost:8000</code> in{" "}
+        <code className="text-red-400">frontend/.env.local</code>, then redeploy Render after pushing{" "}
+        <code className="text-red-400">ml/</code> updates.
       </p>
     </div>
   );

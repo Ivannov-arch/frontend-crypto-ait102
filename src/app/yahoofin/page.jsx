@@ -3,33 +3,18 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import PredictionCard, { PredictionError, PredictionSkeleton } from "@/components/PredictionCard";
+import {
+  API_BASE_URL,
+  PREDICTION_TIMEOUT_MS,
+  fetchPrediction,
+  fetchWeekly,
+} from "@/lib/marketApi";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 const DEFAULT_SYMBOL = "BTC-USD";
 const DEFAULT_START = "2025-01-01";
 const INTERVAL = "1h";
-const PREDICTION_TIMEOUT_MS = 40_000;
-
-async function fetchWeekly(symbol, start) {
-  const res = await fetch(
-    `${API_BASE_URL}/market/weekly?symbol=${symbol}&start=${start}&interval=${INTERVAL}`
-  );
-  if (!res.ok) throw new Error(`Market API error (${res.status})`);
-  const json = await res.json();
-  if (!json.data?.length) throw new Error("Market data empty");
-  return json.data;
-}
-
-async function fetchPrediction(symbol, start, signal) {
-  const res = await fetch(
-    `${API_BASE_URL}/market/prediction?symbol=${symbol}&start=${start}&interval=${INTERVAL}`,
-    { signal }
-  );
-  if (!res.ok) throw new Error(`Prediction API error (${res.status})`);
-  return res.json();
-}
 
 export default function YahooFinPage() {
   const [candleData, setCandleData] = useState([]);
@@ -43,7 +28,7 @@ export default function YahooFinPage() {
     setLoadingChart(true);
     setChartError(null);
 
-    fetchWeekly(DEFAULT_SYMBOL, DEFAULT_START)
+    fetchWeekly({ symbol: DEFAULT_SYMBOL, start: DEFAULT_START, interval: INTERVAL })
       .then((rows) => {
         setCandleData(
           rows.map((row) => ({
@@ -64,11 +49,18 @@ export default function YahooFinPage() {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), PREDICTION_TIMEOUT_MS);
 
-    fetchPrediction(DEFAULT_SYMBOL, DEFAULT_START, controller.signal)
+    fetchPrediction({
+      symbol: DEFAULT_SYMBOL,
+      start: DEFAULT_START,
+      interval: INTERVAL,
+      signal: controller.signal,
+    })
       .then(setPrediction)
       .catch((err) => {
         if (err.name === "AbortError") {
-          setPredError("Request timed out — backend took too long to respond.");
+          setPredError(
+            `Request timed out after ${PREDICTION_TIMEOUT_MS / 1000}s. Render may still be on the old LSTM build — redeploy from the ml/ folder.`
+          );
         } else {
           setPredError(err.message || "Could not reach the prediction API.");
         }
@@ -107,9 +99,6 @@ export default function YahooFinPage() {
       {chartError ? (
         <div className="bg-red-900/20 border border-red-700/30 rounded-xl p-4 text-red-400 text-sm">
           ⚠ {chartError}
-          <p className="text-red-500/60 text-xs mt-2">
-            Start backend: <code>cd ml &amp;&amp; uvicorn main:app --reload --port 8000</code>
-          </p>
         </div>
       ) : loadingChart ? (
         <div className="h-[420px] bg-gray-800 animate-pulse rounded-xl flex items-center justify-center text-gray-500">
@@ -123,7 +112,9 @@ export default function YahooFinPage() {
 
       <div className="max-w-2xl">
         {loadingPred && <PredictionSkeleton />}
-        {!loadingPred && predError && <PredictionError message={predError} />}
+        {!loadingPred && predError && (
+          <PredictionError message={predError} apiUrl={API_BASE_URL} />
+        )}
         {!loadingPred && !predError && prediction && <PredictionCard prediction={prediction} />}
       </div>
     </div>

@@ -4,35 +4,17 @@ import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useQuery } from "@tanstack/react-query";
 import PredictionCard, { PredictionError, PredictionSkeleton } from "./PredictionCard";
+import {
+  API_BASE_URL,
+  PREDICTION_TIMEOUT_MS,
+  fetchPrediction,
+  fetchWeekly,
+} from "@/lib/marketApi";
 
 const Chart = dynamic(() => import("react-apexcharts"), { ssr: false });
 
 const SYMBOLS = ["BTC-USD", "ETH-USD", "SOL-USD", "ADA-USD", "BNB-USD"];
 const INTERVAL = "1h";
-const PREDICTION_TIMEOUT_MS = 40_000; // 40s — handles Render cold start
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-// ── Fetch helpers ────────────────────────────────────────────────────────────
-
-async function fetchMarketPeriod({ symbol, start }) {
-  const res = await fetch(
-    `${API_BASE_URL}/market/weekly?symbol=${symbol}&start=${start}`
-  );
-  if (!res.ok) throw new Error(`Market API error (${res.status})`);
-  const json = await res.json();
-  if (!json.data || json.data.length === 0) throw new Error("Market data empty");
-  return json.data;
-}
-
-async function fetchPrediction({ symbol, start, signal }) {
-  const res = await fetch(
-    `${API_BASE_URL}/market/prediction?symbol=${symbol}&start=${start}&interval=${INTERVAL}`,
-    { signal }
-  );
-  if (!res.ok) throw new Error(`Prediction API error (${res.status})`);
-  return res.json();
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -52,7 +34,7 @@ export default function CandlestickChartWithPrediction() {
   // ── Chart data query ────────────────────────────────────────────────────────
   const marketQuery = useQuery({
     queryKey: ["market-period", symbol, start],
-    queryFn:  () => fetchMarketPeriod({ symbol, start }),
+    queryFn:  () => fetchWeekly({ symbol, start, interval: INTERVAL }),
     retry: 1,
   });
 
@@ -69,7 +51,7 @@ export default function CandlestickChartWithPrediction() {
       controller.abort();
     }, PREDICTION_TIMEOUT_MS);
 
-    fetchPrediction({ symbol, start, signal: controller.signal })
+    fetchPrediction({ symbol, start, interval: INTERVAL, signal: controller.signal })
       .then((data) => {
         setPrediction(data);
         setPredError(null);
@@ -203,7 +185,9 @@ export default function CandlestickChartWithPrediction() {
 
       {/* Prediction card — three states */}
       {predLoading && <PredictionSkeleton className="mt-6 max-w-2xl" />}
-      {!predLoading && predError && <PredictionError message={predError} className="mt-6 max-w-2xl" />}
+      {!predLoading && predError && (
+        <PredictionError message={predError} apiUrl={API_BASE_URL} className="mt-6 max-w-2xl" />
+      )}
       {!predLoading && !predError && prediction && (
         <PredictionCard prediction={prediction} className="mt-6 max-w-2xl" />
       )}
